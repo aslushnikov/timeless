@@ -1,10 +1,14 @@
 <meta charset='utf8'>
 <meta name="viewport" content="width=device-width">
+<link rel="stylesheet" href="./typography.css">
+<link rel="stylesheet" href="./style.css">
 <script type=module>
 import { html } from './zhtml.js';
 import { createEvent, emitEvent, onDOMEvent, disposeAll, observable } from './utils.js';
 
 const CHAR_SUM = '∑';
+const CHAR_ALARM = '⏰';
+const CHAR_SPEECH = '💬';
 
 function toHumanStopwatch(elapsedMs) {
   const ms = elapsedMs % 1000;
@@ -24,31 +28,6 @@ function toHumanStopwatch(elapsedMs) {
 
 function showSettings(voiceCommands, gong) {
   voiceCommands.stopListening();
-  const gongOptions = html`<select onInput=${() => gong.settings.gongPeriod.set(+gongOptions.value)}></select>`;
-  for (let i = 5; i < 60; ++i)
-    gongOptions.append(html`<option value=${i} selected=${gong.settings.gongPeriod.get() === i}>${i}</option>`);
-  const narrateTimeOptions = html`<select onInput=${() => gong.settings.timePeriod.set(+narrateTimeOptions.value)}></select>`;
-  for (let i = 2; i < 10; ++i)
-    narrateTimeOptions.append(html`<option value=${i * 5} selected=${gong.settings.timePeriod.get() === i * 5}>${i * 5}</option>`);
-  const dialog = html`
-    <dialog>
-      <h1>Timeless</h1>
-      <div>
-        Gong every ${gongOptions} seconds
-      </div>
-      <div>
-        Narrate time every ${narrateTimeOptions} seconds
-      </div>
-      <button onclick=${() => {
-        dialog.close();
-        dialog.remove();
-        voiceCommands.startListening();
-      }}>OK</button>
-    </dialog>
-  `;
-
-  document.body.append(dialog);
-  dialog.showModal();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -75,16 +54,45 @@ window.addEventListener('DOMContentLoaded', async () => {
     lapsVeiw.addLap(timer.elapsed());
   });
 
+  const gongOptions = html`<select onInput=${() => gong.settings.gongPeriod.set(+gongOptions.value)}></select>`;
+  for (let i = 5; i < 60; ++i)
+    gongOptions.append(html`<option value=${i} selected=${gong.settings.gongPeriod.get() === i}>${i}</option>`);
+  const narrateTimeOptions = html`<select onInput=${() => gong.settings.timePeriod.set(+narrateTimeOptions.value)}></select>`;
+  for (let i = 2; i < 10; ++i)
+    narrateTimeOptions.append(html`<option value=${i * 5} selected=${gong.settings.timePeriod.get() === i * 5}>${i * 5}</option>`);
   document.body.append(html`
-    ${timer.element}
-    <button onzrender=${node => timer.isRunning.observe(isRunning => {
-      node.textContent = isRunning ? 'Stop' : 'Start';
-    })} onclick=${() => timer.toggle()}></button>
-    <button onclick=${() => showSettings(voiceCommands, gong)}>show settings</button>
-    ${lapsVeiw.element}
+    <section>
+      ${timer.element}
+      <div>
+      <div>${CHAR_ALARM} every ${gongOptions} seconds</div>
+      <div>${CHAR_SPEECH} every ${narrateTimeOptions} seconds</div>
+      </div>
+      <button onzrender=${node => timer.isRunning.observe(isRunning => {
+        node.textContent = isRunning ? 'Stop' : 'Start';
+      })} onclick=${() => timer.toggle()}></button>
+      ${lapsVeiw.element}
+    </section>
   `);
 
-  showSettings(voiceCommands, gong);
+  const dialog = html`
+    <dialog>
+      <h1>TimeLess</h1>
+      <h4>Voice-Controller Timer</h4>
+      <p>Since Safari requires explicit user interaction to enable dictation and speech synthesis, click "start" to launch timer.
+      </p>
+      <div style='text-align: center;'>
+      <button onclick=${() => {
+        voiceCommands.startListening();
+        timer.start();
+        dialog.close();
+        dialog.remove();
+      }}><h1>Start Timer</h1>
+      </button>
+      </div>
+    </dialog>
+  `;
+  document.body.append(dialog);
+  dialog.showModal();
 }, false);
 
 const REFRESH_RATE = 20;
@@ -97,7 +105,7 @@ class Timer {
     };
     this.isRunning = observable(false);
 
-    this.element = html`<div></div>`;
+    this.element = html`<div id=timer></div>`;
     this._timer = null;
     this._elapsed = 0;
     this._render();
