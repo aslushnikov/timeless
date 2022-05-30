@@ -1,0 +1,308 @@
+<meta charset='utf8'>
+<meta name="viewport" content="width=device-width">
+<script type=module>
+import { html } from './zhtml.js';
+import { createEvent, emitEvent, onDOMEvent, disposeAll, observable } from './utils.js';
+
+const CHAR_SUM = '∑';
+
+function toHumanStopwatch(elapsedMs) {
+  const ms = elapsedMs % 1000;
+  const seconds = Math.floor(elapsedMs / 1000) % 60;
+  const minutes = Math.floor(elapsedMs / 1000 / 60) % 60;
+  return [
+    minutes / 10 | 0,
+    minutes % 10,
+    ':',
+    seconds / 10 | 0,
+    seconds % 10,
+    '.',
+    ms / 100 | 0,
+    (ms % 100) / 10 | 0,
+  ].join('');
+}
+
+function showSettings(voiceCommands, gong) {
+  voiceCommands.stopListening();
+  const gongOptions = html`<select onInput=${() => gong.settings.gongPeriod.set(+gongOptions.value)}></select>`;
+  for (let i = 5; i < 60; ++i)
+    gongOptions.append(html`<option value=${i} selected=${gong.settings.gongPeriod.get() === i}>${i}</option>`);
+  const narrateTimeOptions = html`<select onInput=${() => gong.settings.timePeriod.set(+narrateTimeOptions.value)}></select>`;
+  for (let i = 2; i < 10; ++i)
+    narrateTimeOptions.append(html`<option value=${i * 5} selected=${gong.settings.timePeriod.get() === i * 5}>${i * 5}</option>`);
+  const dialog = html`
+    <dialog>
+      <h1>Timeless</h1>
+      <div>
+        Gong every ${gongOptions} seconds
+      </div>
+      <div>
+        Narrate time every ${narrateTimeOptions} seconds
+      </div>
+      <button onclick=${() => {
+        dialog.close();
+        dialog.remove();
+        voiceCommands.startListening();
+      }}>OK</button>
+    </dialog>
+  `;
+
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const timer = new Timer();
+  const voiceCommands = new VoiceCommands();
+  const narrator = new Narrator(timer);
+  const lapsVeiw = new LapsView();
+  const gong = new Gong(timer, narrator);
+
+  voiceCommands.events.onCommandStart(() => timer.start());
+  voiceCommands.events.onCommandStop(() => timer.stop());
+  voiceCommands.events.onCommandTime(() => {
+    narrator.speak(timer.elapsedSecondsText());
+  });
+
+  narrator.events.onSpeakingWillStart(() => voiceCommands.stopListening());
+  narrator.events.onSpeakingFinished(() => voiceCommands.startListening());
+
+  timer.events.onStart(timer => {
+    narrator.speak('Started');
+  });
+  timer.events.onStop(timer => {
+    narrator.speak(timer.elapsedSecondsText() + ' total');
+    lapsVeiw.addLap(timer.elapsed());
+  });
+
+  document.body.append(html`
+    ${timer.element}
+    <button onzrender=${node => timer.isRunning.observe(isRunning => {
+      node.textContent = isRunning ? 'Stop' : 'Start';
+    })} onclick=${() => timer.toggle()}></button>
+    <button onclick=${() => showSettings(voiceCommands, gong)}>show settings</button>
+    ${lapsVeiw.element}
+  `);
+
+  showSettings(voiceCommands, gong);
+}, false);
+
+const REFRESH_RATE = 20;
+class Timer {
+  constructor() {
+    this.events = {
+      onStart: createEvent(),
+      onSecondPassed: createEvent(),
+      onStop: createEvent(),
+    };
+    this.isRunning = observable(false);
+
+    this.element = html`<div></div>`;
+    this._timer = null;
+    this._elapsed = 0;
+    this._render();
+  }
+
+  _render() {
+    this.element.textContent = toHumanStopwatch(this._elapsed);
+  }
+
+  _tick(previousTimestamp = 0) {
+    const now = Date.now();
+    // First tick doesn't have previous timestamp
+    if (previousTimestamp) {
+      const oldElapsed = this._elapsed;
+      this._elapsed += now - previousTimestamp;
+      if (Math.floor(this._elapsed / 1000) > Math.floor(oldElapsed / 1000))
+        emitEvent(this.events.onSecondPassed);
+    }
+    this._render();
+    this._timer = setTimeout(() => this._tick(now), 1000 / REFRESH_RATE);
+  }
+
+  start() {
+    if (this._timer)
+      return;
+    this.isRunning.set(true);
+
+    this._elapsed = 0;
+    this._tick();
+    emitEvent(this.events.onStart, this);
+  }
+
+  stop() {
+    if (!this._timer)
+      return;
+    this.isRunning.set(false);
+    clearTimeout(this._timer);
+    this._timer = null;
+    emitEvent(this.events.onStop, this);
+  }
+
+  toggle() {
+    if (this._timer)
+      this.stop();
+    else
+      this.start();
+  }
+
+  reset() {
+    this._elapsed = 0;
+    this._render();
+  }
+
+  elapsed() {
+    return this._elapsed;
+  }
+
+  elapsedSeconds() {
+    return Math.floor(this._elapsed / 1000);
+  }
+
+  elapsedSecondsText() {
+    const seconds = this.elapsedSeconds();
+    return seconds === 1 ? '1 second' : seconds + ' seconds';
+  }
+}
+
+class LapsView {
+  constructor() {
+    this._laps = [];
+    this.element = html`<div></div>`;
+    this._render();
+  }
+
+  _render() {
+    this.element.textContent = '';
+    let sum = 0;
+    for (let i = 0; i < this._laps.length; ++i) {
+      const lap = this._laps[i];
+      sum += lap;
+      this.element.append(html`<div>Lap ${i + 1}: ${toHumanStopwatch(lap)}</div>`);
+    }
+    this.element.append(html`<div>${CHAR_SUM}: ${toHumanStopwatch(sum)}</div>`);
+  }
+
+  addLap(elapsed) {
+    this._laps.push(elapsed);
+    this._render();
+  }
+}
+
+class Gong {
+  constructor(timer, narrator) {
+    this._timer = timer;
+    this._narrator = narrator;
+    this._eventListeners = [
+      timer.events.onSecondPassed(this._onSecondPassed.bind(this)),
+    ];
+
+    this.settings = {
+      gongPeriod: observable(5),
+      timePeriod: observable(30),
+    };
+  }
+
+  _onSecondPassed() {
+    if (this._timer.elapsedSeconds() % this.settings.timePeriod.get() === 0) {
+      this._narrator.speak('Running ' + this._timer.elapsedSecondsText());
+    } else if (this._timer.elapsedSeconds() % this.settings.gongPeriod.get() === 0) {
+      const audio = new Audio('./tone.wav');
+      audio.play();
+    }
+  }
+}
+
+class VoiceCommands {
+  constructor() {
+    this.events = {
+      onListening: createEvent(),
+      onCommandStart: createEvent(),
+      onCommandStop: createEvent(),
+      onCommandTime: createEvent(),
+    };
+
+    this._eventListeners = [];
+  }
+
+  _onRecognitionResult(event) {
+    const current =  event.resultIndex;
+    const result = event.results[current][0];
+    console.log(result);
+    const lastWord = result.transcript.toLowerCase().trim().split(/\W+/).pop();
+    if (lastWord.includes('go') || lastWord.includes('start') || lastWord === 'up')
+      emitEvent(this.events.onCommandStart);
+    else if (lastWord.includes('stop') || lastWord === 'down' || lastWord.endsWith('.'))
+      emitEvent(this.events.onCommandStop);
+    else if (lastWord.includes('time'))
+      emitEvent(this.events.onCommandTime);
+  }
+
+  _onRecognitionError(event) {
+    console.log(event);
+    this.stopListening();
+    this.startListening();
+  }
+
+  startListening() {
+    if (this._recognition)
+      return;
+    const SpeechRecognition = webkitSpeechRecognition || SpeechRecognition;
+    this._recognition = new SpeechRecognition();
+    this._recognition.continuous = true;
+    this._recognition.interimResults = true;
+    this._eventListeners = [
+      onDOMEvent(this._recognition, 'audiostart', () => emitEvent(this.events.onListening)),
+      onDOMEvent(this._recognition, 'speechstart', () => console.log('speech start')),
+      onDOMEvent(this._recognition, 'speechend', () => console.log('speech end')),
+      onDOMEvent(this._recognition, 'nomatch', () => console.log('no match')),
+      onDOMEvent(this._recognition, 'error', this._onRecognitionError.bind(this)),
+      onDOMEvent(this._recognition, 'result', this._onRecognitionResult.bind(this)),
+    ];
+    this._recognition.start();
+  }
+
+  stopListening() {
+    if (this._recognition) {
+      disposeAll(this._eventListeners);
+      this._recognition.stop();
+      this._recognition = null;
+    }
+  }
+}
+
+class Narrator {
+  constructor() {
+    this.events = {
+      onSpeakingWillStart: createEvent(),
+      onSpeakingFinished: createEvent(),
+    };
+
+    this._eventListeners = [];
+    this._isSpeaking = false;
+  }
+
+  _onSpeakEnd() {
+    this._isSpeaking = false;
+    emitEvent(this.events.onSpeakingFinished);
+  }
+
+  speak(text) {
+    if (this._isSpeaking) {
+      disposeAll(this._eventListeners);
+      speechSynthesis.cancel();
+    } else {
+      emitEvent(this.events.onSpeakingWillStart);
+    }
+
+    this._isSpeaking = true;
+    const utterance = new SpeechSynthesisUtterance();
+    utterance.text = text;
+    this._eventListeners = [
+      onDOMEvent(utterance, 'end', this._onSpeakEnd.bind(this)),
+    ];
+    speechSynthesis.speak(utterance);
+  }
+}
+
+</script>
