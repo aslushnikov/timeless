@@ -259,6 +259,7 @@ class VoiceCommands {
     this._recognition = new SpeechRecognition();
     this._recognition.continuous = true;
     this._recognition.interimResults = true;
+    this._recognition.lang = 'en-US';
     this._eventListeners = [
       onDOMEvent(this._recognition, 'audiostart', () => emitEvent(this.events.onListening)),
       onDOMEvent(this._recognition, 'speechstart', () => console.log('speech start')),
@@ -305,6 +306,7 @@ class Narrator {
 
     this._isSpeaking = true;
     const utterance = new SpeechSynthesisUtterance();
+    utterance.lang = 'en-US';
     utterance.text = text;
     this._eventListeners = [
       onDOMEvent(utterance, 'end', this._onSpeakEnd.bind(this)),
