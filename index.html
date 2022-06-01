@@ -26,16 +26,11 @@ function toHumanStopwatch(elapsedMs) {
   ].join('');
 }
 
-function showSettings(voiceCommands, gong) {
-  voiceCommands.stopListening();
-}
-
 window.addEventListener('DOMContentLoaded', async () => {
   const timer = new Timer();
   const voiceCommands = new VoiceCommands();
   const narrator = new Narrator(timer);
   const lapsVeiw = new LapsView();
-  const gong = new Gong(timer, narrator);
 
   voiceCommands.events.onCommandStart(() => timer.start());
   voiceCommands.events.onCommandStop(() => timer.stop());
@@ -54,45 +49,22 @@ window.addEventListener('DOMContentLoaded', async () => {
     lapsVeiw.addLap(timer.elapsed());
   });
 
-  const gongOptions = html`<select onInput=${() => gong.settings.gongPeriod.set(+gongOptions.value)}></select>`;
-  for (let i = 5; i < 60; ++i)
-    gongOptions.append(html`<option value=${i} selected=${gong.settings.gongPeriod.get() === i}>${i}</option>`);
-  const narrateTimeOptions = html`<select onInput=${() => gong.settings.timePeriod.set(+narrateTimeOptions.value)}></select>`;
-  for (let i = 2; i < 10; ++i)
-    narrateTimeOptions.append(html`<option value=${i * 5} selected=${gong.settings.timePeriod.get() === i * 5}>${i * 5}</option>`);
   document.body.append(html`
     <section>
       ${timer.element}
       <div>
-      <div>${CHAR_ALARM} every ${gongOptions} seconds</div>
-      <div>${CHAR_SPEECH} every ${narrateTimeOptions} seconds</div>
-      </div>
       <button onzrender=${node => timer.isRunning.observe(isRunning => {
         node.textContent = isRunning ? 'Stop' : 'Start';
       })} onclick=${() => timer.toggle()}></button>
+      ${voiceCommands.element}
+      </div>
+      <div>
+        ${new SoundAlarm(timer).element}
+        ${new TimeAlarm(timer, narrator).element}
+      </div>
       ${lapsVeiw.element}
     </section>
   `);
-
-  const dialog = html`
-    <dialog>
-      <h1>TimeLess</h1>
-      <h4>Voice-Controller Timer</h4>
-      <p>Since Safari requires explicit user interaction to enable dictation and speech synthesis, click "start" to launch timer.
-      </p>
-      <div style='text-align: center;'>
-      <button onclick=${() => {
-        voiceCommands.startListening();
-        timer.start();
-        dialog.close();
-        dialog.remove();
-      }}><h1>Start Timer</h1>
-      </button>
-      </div>
-    </dialog>
-  `;
-  document.body.append(dialog);
-  dialog.showModal();
 }, false);
 
 const REFRESH_RATE = 20;
@@ -105,7 +77,7 @@ class Timer {
     };
     this.isRunning = observable(false);
 
-    this.element = html`<div id=timer></div>`;
+    this.element = html`<span id=timer></span>`;
     this._timer = null;
     this._elapsed = 0;
     this._render();
@@ -197,7 +169,53 @@ class LapsView {
   }
 }
 
-class Gong {
+class SoundAlarm {
+  constructor(timer) {
+    this._timer = timer;
+    this._eventListeners = [
+      timer.events.onSecondPassed(this._onSecondPassed.bind(this)),
+    ];
+
+    this.settings = {
+      period: observable(5),
+      enabled: observable(false),
+    };
+
+    this._audio = new Audio('./tone.wav');
+    this.settings.enabled.observe(value => {
+      if (value)
+        this._audio.play();
+    });
+
+    this.element = html`
+      <hbox>
+        <input id=sound-enabled
+               type=checkbox
+               onzrender=${node => this.settings.enabled.observe(value => {
+                 node.checked = value;
+               })}
+               oninput=${event => this.settings.enabled.set(event.target.checked)}
+        >
+        <label for=sound-enabled>
+          ${CHAR_ALARM} every
+          <select onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
+          seconds
+        </label>
+      </hbox>
+    `;
+    for (let i = 5; i < 60; ++i)
+      this.element.$('select').append(html`<option value=${i} selected=${this.settings.period.get() === i}>${i}</option>`);
+  }
+
+  _onSecondPassed() {
+    if (!this.settings.enabled.get())
+      return;
+    if (this._timer.elapsedSeconds() % this.settings.period.get() === 0)
+      this._audio.play();
+  }
+}
+
+class TimeAlarm {
   constructor(timer, narrator) {
     this._timer = timer;
     this._narrator = narrator;
@@ -206,18 +224,34 @@ class Gong {
     ];
 
     this.settings = {
-      gongPeriod: observable(5),
-      timePeriod: observable(30),
+      period: observable(30),
+      enabled: observable(false),
     };
+
+    this.element = html`
+      <hbox>
+        <input type=checkbox
+            oninput=${event => this.settings.enabled.set(event.target.checked)}
+            onzrender=${node => this.settings.enabled.observe(value => {
+              node.checked = value;
+            })}
+        >
+        <label for=time-alarm>
+          ${CHAR_SPEECH} every
+          <select onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
+          seconds
+        </label>
+      </hbox>
+    `;
+  for (let i = 2; i < 10; ++i)
+    this.element.$('select').append(html`<option value=${i * 5} selected=${this.settings.period.get() === i * 5}>${i * 5}</option>`);
   }
 
   _onSecondPassed() {
-    if (this._timer.elapsedSeconds() % this.settings.timePeriod.get() === 0) {
+    if (!this.settings.enabled.get())
+      return;
+    if (this._timer.elapsedSeconds() % this.settings.period.get() === 0)
       this._narrator.speak('Running ' + this._timer.elapsedSecondsText());
-    } else if (this._timer.elapsedSeconds() % this.settings.gongPeriod.get() === 0) {
-      const audio = new Audio('./tone.wav');
-      audio.play();
-    }
   }
 }
 
@@ -229,8 +263,19 @@ class VoiceCommands {
       onCommandStop: createEvent(),
       onCommandTime: createEvent(),
     };
-
     this._eventListeners = [];
+
+    this.element = html`
+      <button onclick=${() => this.settings.enabled.set(!this.settings.enabled.get())}></button>
+    `;
+    this.settings = {};
+    this.settings.enabled = observable(false, value => {
+      this.element.textContent = value ? 'Mic ON' : 'Mic OFF';
+      if (value)
+        this.startListening();
+      else
+        this.stopListening();
+    });
   }
 
   _onRecognitionResult(event) {
@@ -253,7 +298,7 @@ class VoiceCommands {
   }
 
   startListening() {
-    if (this._recognition)
+    if (!this.settings.enabled.get() || this._recognition)
       return;
     const SpeechRecognition = webkitSpeechRecognition || SpeechRecognition;
     this._recognition = new SpeechRecognition();
