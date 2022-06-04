@@ -27,16 +27,5 @@ body {
   margin-bottom: 5px;
 }
 
-#startbtn {
-  font-size: 25px;
-  margin-right: 5px;
-}
-
-#micbtn {
-  border-radius: 100%;
-  padding: 0;
-  border: 0;
-}
-
 #startbtn.running {
 }

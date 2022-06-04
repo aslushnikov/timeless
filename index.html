@@ -1,5 +1,7 @@
 <meta charset='utf8'>
 <meta name="viewport" content="width=device-width">
+<title>TimeLess</title>
+<link rel="icon" href="./favicon.svg">
 <link rel="stylesheet" href="./typography.css">
 <link rel="stylesheet" href="./style.css">
 
@@ -38,7 +40,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   micView.events.onRecognition(transcript => {
     const lastWord = transcript.toLowerCase().trim().split(/\W+/).pop();
-    micDebugElement.textContent = transcript;
+    micDebugElement.textContent = 'Last command: "' + transcript + '"';
     if (lastWord === 'go' || lastWord === 'start' || lastWord === 'up')
       timerView.start();
     else if (lastWord === 'stop' || lastWord === 'down' || lastWord.endsWith('.'))
@@ -58,6 +60,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     lapsVeiw.addLap(timerView.elapsed());
   });
 
+  const startStopButton = html`
+    <button style='
+          flex: auto;
+          margin-right: 5px;
+          padding: 5px;
+      '    onzrender=${node => timerView.isRunning.observe(isRunning => {
+            const img = node.querySelector('img');
+            img.src = isRunning ? './stop.svg' : './play.svg';
+            node.className = isRunning ? 'running' : '';
+          })} onclick=${() => timerView.toggle()}>
+      <img width="20px" src="./play.svg">
+    </button>
+  `;
+
   document.body.append(html`
     <section id=main>
       <div id=timer>${timerView.element}</div>
@@ -67,16 +83,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         ${new VoiceAlarmView(timerView, voice).element}
       </hbox>
       <hbox style='justify-content: space-between; margin-bottom: 5px;'>
-        <button id=startbtn style='
-          flex-grow: 5;
-        'onzrender=${node => timerView.isRunning.observe(isRunning => {
-          node.textContent = isRunning ? 'Stop' : 'Start';
-          node.className = isRunning ? 'running' : '';
-        })} onclick=${() => timerView.toggle()}></button>
+        ${startStopButton}
         ${micView.element}
       </hbox>
       <div style='font-size: 8px;'>
-        mic transcript: ${micDebugElement}
+        voice commands: "start", "stop", "go", "time". ${micDebugElement}
       </div>
     </section>
   `);
@@ -283,21 +294,27 @@ class MicView {
     this.events = {
       onRecognition: createEvent(),
     };
-    this._eventListeners = [];
-
-    this.element = html`
-      <button id=micbtn onclick=${() => this.settings.enabled.set(!this.settings.enabled.get())}>
-        <img width='25px' height='25px' src='./mic.svg'>
-      </button>
-    `;
     this.settings = {};
     this.settings.enabled = observable(false, value => {
-      this.element.style.setProperty('background-color', value ? 'red' : 'transparent');
       if (value)
         this.startListening();
       else
         this.stopListening();
     });
+
+    this._eventListeners = [];
+
+    this.element = html`
+      <button style='
+        padding: 5px;
+      'onclick=${event => this.settings.enabled.set(!this.settings.enabled.get())}>
+        <img width='20px' height='20px' src='./mic.svg'
+             onzrender=${node => this.settings.enabled.observe(value => {
+               node.src = value ? './mic.svg' : 'nomic.svg';
+             })}
+        >
+      </button>
+    `;
   }
 
   _onRecognitionResult(event) {
