@@ -40,7 +40,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     else if (command === 'stop')
       timerView.stop();
     else if (command === 'time')
-      voice.speak(timerView.elapsedSecondsText());
+      voice.speak(timerView.elapsedTimeText());
   });
 
   voice.events.onSpeakingWillStart(() => micView.stopListening());
@@ -50,7 +50,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     voice.speak('Started');
   });
   timerView.events.onStop(timerView => {
-    voice.speak(timerView.elapsedSecondsText() + ' total');
+    voice.speak(timerView.elapsedTimeText() + ' total');
     lapsVeiw.addLap(timerView.elapsed());
   });
 
@@ -150,9 +150,16 @@ class TimerView {
     return Math.floor(this._elapsed / 1000);
   }
 
-  elapsedSecondsText() {
-    const seconds = this.elapsedSeconds();
-    return seconds === 1 ? '1 second' : seconds + ' seconds';
+  elapsedTimeText() {
+    let seconds = this.elapsedSeconds();
+    let minutes = (seconds / 60) | 0;
+    seconds = seconds % 60;
+    let text = [];
+    if (minutes)
+      text.push(minutes === 1 ? '1 minute' : minute + ' minutes');
+    if (seconds || !minutes)
+      text.push(seconds === 1 ? '1 second' : seconds + ' seconds');
+    return text.join(' ');
   }
 }
 
@@ -263,7 +270,7 @@ class VoiceAlarmView {
 
   _onSecondPassed() {
     if (this.settings.period.get() && this._timer.elapsedSeconds() % this.settings.period.get() === 0)
-      this._voice.speak('Running ' + this._timer.elapsedSecondsText());
+      this._voice.speak('Running ' + this._timer.elapsedTimeText());
   }
 }
 
