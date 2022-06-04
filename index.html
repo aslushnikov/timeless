@@ -27,40 +27,44 @@ function toHumanStopwatch(elapsedMs) {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  const timer = new Timer();
-  const voiceCommands = new VoiceCommands();
-  const narrator = new Narrator(timer);
+  const timerView = new TimerView();
+  const micView = new MicView();
   const lapsVeiw = new LapsView();
 
-  voiceCommands.events.onCommandStart(() => timer.start());
-  voiceCommands.events.onCommandStop(() => timer.stop());
-  voiceCommands.events.onCommandTime(() => {
-    narrator.speak(timer.elapsedSecondsText());
+  const voice = new VoiceSynthesizer(timerView);
+
+  micView.events.onCommand(command => {
+    if (command === 'start')
+      timerView.start();
+    else if (command === 'stop')
+      timerView.stop();
+    else if (command === 'time')
+      voice.speak(timerView.elapsedSecondsText());
   });
 
-  narrator.events.onSpeakingWillStart(() => voiceCommands.stopListening());
-  narrator.events.onSpeakingFinished(() => voiceCommands.startListening());
+  voice.events.onSpeakingWillStart(() => micView.stopListening());
+  voice.events.onSpeakingFinished(() => micView.startListening());
 
-  timer.events.onStart(timer => {
-    narrator.speak('Started');
+  timerView.events.onStart(timerView => {
+    voice.speak('Started');
   });
-  timer.events.onStop(timer => {
-    narrator.speak(timer.elapsedSecondsText() + ' total');
-    lapsVeiw.addLap(timer.elapsed());
+  timerView.events.onStop(timerView => {
+    voice.speak(timerView.elapsedSecondsText() + ' total');
+    lapsVeiw.addLap(timerView.elapsed());
   });
 
   document.body.append(html`
     <section>
-      ${timer.element}
+      ${timerView.element}
       <div>
-      <button onzrender=${node => timer.isRunning.observe(isRunning => {
+      <button onzrender=${node => timerView.isRunning.observe(isRunning => {
         node.textContent = isRunning ? 'Stop' : 'Start';
-      })} onclick=${() => timer.toggle()}></button>
-      ${voiceCommands.element}
+      })} onclick=${() => timerView.toggle()}></button>
+      ${micView.element}
       </div>
       <div>
-        ${new SoundAlarm(timer).element}
-        ${new TimeAlarm(timer, narrator).element}
+        ${new SoundAlarmView(timerView).element}
+        ${new VoiceAlarmView(timerView, voice).element}
       </div>
       ${lapsVeiw.element}
     </section>
@@ -68,7 +72,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 }, false);
 
 const REFRESH_RATE = 20;
-class Timer {
+class TimerView {
   constructor() {
     this.events = {
       onStart: createEvent(),
@@ -169,7 +173,7 @@ class LapsView {
   }
 }
 
-class SoundAlarm {
+class SoundAlarmView {
   constructor(timer) {
     this._timer = timer;
     this._eventListeners = [
@@ -182,9 +186,12 @@ class SoundAlarm {
     };
 
     this._audio = new Audio('./tone.wav');
+    this._audio.load();
     this.settings.enabled.observe(value => {
-      if (value)
+      if (value) {
+        this._audio.currentTime = 0;
         this._audio.play();
+      }
     });
 
     this.element = html`
@@ -210,15 +217,17 @@ class SoundAlarm {
   _onSecondPassed() {
     if (!this.settings.enabled.get())
       return;
-    if (this._timer.elapsedSeconds() % this.settings.period.get() === 0)
+    if (this._timer.elapsedSeconds() % this.settings.period.get() === 0) {
+      this._audio.currentTime = 0;
       this._audio.play();
+    }
   }
 }
 
-class TimeAlarm {
-  constructor(timer, narrator) {
+class VoiceAlarmView {
+  constructor(timer, voice) {
     this._timer = timer;
-    this._narrator = narrator;
+    this._voice = voice;
     this._eventListeners = [
       timer.events.onSecondPassed(this._onSecondPassed.bind(this)),
     ];
@@ -251,17 +260,15 @@ class TimeAlarm {
     if (!this.settings.enabled.get())
       return;
     if (this._timer.elapsedSeconds() % this.settings.period.get() === 0)
-      this._narrator.speak('Running ' + this._timer.elapsedSecondsText());
+      this._voice.speak('Running ' + this._timer.elapsedSecondsText());
   }
 }
 
-class VoiceCommands {
+class MicView {
   constructor() {
     this.events = {
       onListening: createEvent(),
-      onCommandStart: createEvent(),
-      onCommandStop: createEvent(),
-      onCommandTime: createEvent(),
+      onCommand: createEvent(),
     };
     this._eventListeners = [];
 
@@ -284,11 +291,11 @@ class VoiceCommands {
     console.log(result);
     const lastWord = result.transcript.toLowerCase().trim().split(/\W+/).pop();
     if (lastWord.includes('go') || lastWord.includes('start') || lastWord === 'up')
-      emitEvent(this.events.onCommandStart);
+      emitEvent(this.events.onCommand, 'start');
     else if (lastWord.includes('stop') || lastWord === 'down' || lastWord.endsWith('.'))
-      emitEvent(this.events.onCommandStop);
+      emitEvent(this.events.onCommand, 'stop');
     else if (lastWord.includes('time'))
-      emitEvent(this.events.onCommandTime);
+      emitEvent(this.events.onCommand, 'time');
   }
 
   _onRecognitionError(event) {
@@ -309,8 +316,9 @@ class VoiceCommands {
       onDOMEvent(this._recognition, 'audiostart', () => emitEvent(this.events.onListening)),
       onDOMEvent(this._recognition, 'speechstart', () => console.log('speech start')),
       onDOMEvent(this._recognition, 'speechend', () => console.log('speech end')),
-      onDOMEvent(this._recognition, 'nomatch', () => console.log('no match')),
+      onDOMEvent(this._recognition, 'nomatch', this._onRecognitionError.bind(this)),
       onDOMEvent(this._recognition, 'error', this._onRecognitionError.bind(this)),
+      onDOMEvent(this._recognition, 'end', this._onRecognitionError.bind(this)),
       onDOMEvent(this._recognition, 'result', this._onRecognitionResult.bind(this)),
     ];
     this._recognition.start();
@@ -325,7 +333,7 @@ class VoiceCommands {
   }
 }
 
-class Narrator {
+class VoiceSynthesizer {
   constructor() {
     this.events = {
       onSpeakingWillStart: createEvent(),
