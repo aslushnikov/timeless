@@ -243,13 +243,19 @@ class SoundAlarmView {
     this._audio = new Audio('./tone.wav');
     this._audio.load();
 
+    this._initialized = false;
+
     this.element = html`
       <select onClick=${() => {
         // we have to play audio from trusted event to initialize
         // it on IOS.
-        this._audio.volume = 0;
-        this._audio.currentTime = 0;
-        this._audio.play();
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        if (!this._initialized && isSafari) {
+          this._initialized = true;
+          this._audio.volume = 0.01;
+          this._audio.currentTime = 0;
+          this._audio.play();
+        }
       }} class=alarm-options onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
     `;
     this.element.append(html`<option value=0>${CHAR_ALARM} never</option>`);
