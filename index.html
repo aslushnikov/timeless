@@ -64,7 +64,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     <button style='
           flex: auto;
           margin-right: 5px;
-          padding: 5px;
       '    onzrender=${node => timerView.isRunning.observe(isRunning => {
             const img = node.querySelector('img');
             img.src = isRunning ? './stop.svg' : './play.svg';
@@ -182,8 +181,17 @@ class TimerView {
 class LapsView {
   constructor() {
     this._laps = [];
-    this._lapsElement = html`<div style='flex: auto; min-height: 0; overflow: scroll;'></div>`;
-    this._titleElement = html`<hbox></hbox>`;
+    this._lapsElement = html`<div style='
+        font-size: 16px;
+        flex: auto;
+        min-height: 0;
+        overflow: scroll;
+    '></div>`;
+    this._titleElement = html`<hbox style='
+        font-size: 24px;
+        border-bottom: 1px solid #767676;
+        margin-bottom: 6px;
+    '></hbox>`;
     this.element = html`
       <vbox style='flex: auto; min-height: 0;'>
         ${this._titleElement}
@@ -208,9 +216,9 @@ class LapsView {
     }
     this._titleElement.textContent = '';
     this._titleElement.append(html`
-      <h3>Laps: ${this._laps.length}</h3>
+      <div>Laps: ${this._laps.length}</div>
       <span style='flex: auto'></span>
-      <h3>${toHumanStopwatch(sum)}</h3>
+      <div style='font-family: var(--monospace2);'>${CHAR_SUM}=${toHumanStopwatch(sum)}</div>
     `);
     this._lapsElement.scrollTop = 1000000;
   }
