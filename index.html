@@ -36,11 +36,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const voice = new VoiceSynthesizer(timerView);
 
-  const micDebugElement = html`<span></span>`;
+  const micDebugElement = html`<span>(enable mic)</span>`;
 
   micView.events.onRecognition(transcript => {
     const lastWord = transcript.toLowerCase().trim().split(/\W+/).pop();
-    micDebugElement.textContent = 'Last command: "' + transcript + '"';
+    micDebugElement.textContent = '"' + transcript.trim() + '"';
     if (lastWord === 'go' || lastWord === 'start' || lastWord === 'up')
       timerView.start();
     else if (lastWord === 'stop' || lastWord === 'down' || lastWord.endsWith('.'))
@@ -70,7 +70,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             img.src = isRunning ? './stop.svg' : './play.svg';
             node.className = isRunning ? 'running' : '';
           })} onclick=${() => timerView.toggle()}>
-      <img width="20px" src="./play.svg">
+      <img src="./play.svg">
     </button>
   `;
 
@@ -86,8 +86,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         ${startStopButton}
         ${micView.element}
       </hbox>
-      <div style='font-size: 8px;'>
-        voice commands: "start", "stop", "go", "time". ${micDebugElement}
+      <div style='font-size: 14px;'>
+        <div>Voice commands: "start", "stop", "go", "time".</div>
+        <div>Last command: ${micDebugElement}</div>
       </div>
     </section>
   `);
@@ -306,9 +307,8 @@ class MicView {
 
     this.element = html`
       <button style='
-        padding: 5px;
       'onclick=${event => this.settings.enabled.set(!this.settings.enabled.get())}>
-        <img width='20px' height='20px' src='./mic.svg'
+        <img src='./mic.svg'
              onzrender=${node => this.settings.enabled.observe(value => {
                node.src = value ? './mic.svg' : 'nomic.svg';
              })}
