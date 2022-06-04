@@ -62,10 +62,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     <section id=main>
       <div id=timer>${timerView.element}</div>
       ${lapsVeiw.element}
-      <hbox style='justify-content: center;'>
+      <hbox style='justify-content: space-between;'>
         ${new SoundAlarmView(timerView).element}
-      </hbox>
-      <hbox style='justify-content: center;'>
         ${new VoiceAlarmView(timerView, voice).element}
       </hbox>
       <hbox style='justify-content: space-between; margin-bottom: 5px;'>
