@@ -34,12 +34,16 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const voice = new VoiceSynthesizer(timerView);
 
-  micView.events.onCommand(command => {
-    if (command === 'start')
+  const micDebugElement = html`<span></span>`;
+
+  micView.events.onRecognition(transcript => {
+    const lastWord = transcript.toLowerCase().trim().split(/\W+/).pop();
+    micDebugElement.textContent = transcript;
+    if (lastWord === 'go' || lastWord === 'start' || lastWord === 'up')
       timerView.start();
-    else if (command === 'stop')
+    else if (lastWord === 'stop' || lastWord === 'down' || lastWord.endsWith('.'))
       timerView.stop();
-    else if (command === 'time')
+    else if (lastWord === 'time')
       voice.speak(timerView.elapsedTimeText());
   });
 
@@ -73,7 +77,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         })} onclick=${() => timerView.toggle()}></button>
         ${micView.element}
       </hbox>
-      ${micView.debugElement}
+      <div>
+        mic transcript: ${micDebugElement}
+      </div>
     </section>
   `);
 }, false);
@@ -277,8 +283,7 @@ class VoiceAlarmView {
 class MicView {
   constructor() {
     this.events = {
-      onListening: createEvent(),
-      onCommand: createEvent(),
+      onRecognition: createEvent(),
     };
     this._eventListeners = [];
 
@@ -286,9 +291,6 @@ class MicView {
       <button id=micbtn onclick=${() => this.settings.enabled.set(!this.settings.enabled.get())}>
         <img width='25px' height='25px' src='./mic.svg'>
       </button>
-    `;
-    this.debugElement = html`
-      <div style=''>(mic not listening)</div>
     `;
     this.settings = {};
     this.settings.enabled = observable(false, value => {
@@ -303,14 +305,7 @@ class MicView {
   _onRecognitionResult(event) {
     const current =  event.resultIndex;
     const result = event.results[current][0];
-    this.debugElement.textContent = 'Listening... ' + result.transcript;
-    const lastWord = result.transcript.toLowerCase().trim().split(/\W+/).pop();
-    if (lastWord === 'go' || lastWord === 'start' || lastWord === 'up')
-      emitEvent(this.events.onCommand, 'start');
-    else if (lastWord === 'stop' || lastWord === 'down' || lastWord.endsWith('.'))
-      emitEvent(this.events.onCommand, 'stop');
-    else if (lastWord === 'time')
-      emitEvent(this.events.onCommand, 'time');
+    emitEvent(this.events.onRecognition, result.transcript);
   }
 
   _onRecognitionError(event) {
@@ -323,13 +318,11 @@ class MicView {
     if (!this.settings.enabled.get() || this._recognition)
       return;
     const SpeechRecognition = webkitSpeechRecognition || SpeechRecognition;
-    this.debugElement.textContent = 'Listening...';
     this._recognition = new SpeechRecognition();
     this._recognition.continuous = true;
     this._recognition.interimResults = true;
     this._recognition.lang = 'en-US';
     this._eventListeners = [
-      onDOMEvent(this._recognition, 'audiostart', () => emitEvent(this.events.onListening)),
       onDOMEvent(this._recognition, 'speechstart', () => console.log('speech start')),
       onDOMEvent(this._recognition, 'speechend', () => console.log('speech end')),
       onDOMEvent(this._recognition, 'nomatch', this._onRecognitionError.bind(this)),
@@ -342,7 +335,6 @@ class MicView {
 
   stopListening() {
     if (this._recognition) {
-      this.debugElement.textContent = '(mic not listening)';
       disposeAll(this._eventListeners);
       this._recognition.stop();
       this._recognition = null;
