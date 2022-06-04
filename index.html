@@ -243,18 +243,17 @@ class SoundAlarmView {
     this._audio = new Audio('./tone.wav');
     this._audio.load();
 
-    this.settings.period.observe(value => {
-      if (value) {
+    this.element = html`
+      <select onClick=${() => {
+        // we have to play audio from trusted event to initialize
+        // it on IOS.
+        this._audio.volume = 0;
         this._audio.currentTime = 0;
         this._audio.play();
-      }
-    });
-
-    this.element = html`
-      <select class=alarm-options onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
+      }} class=alarm-options onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
     `;
     this.element.append(html`<option value=0>${CHAR_ALARM} never</option>`);
-    for (let i = 5; i < 60; ++i)
+    for (let i = 2; i < 60; ++i)
       this.element.append(html`<option value=${i}>${CHAR_ALARM} every ${i} seconds</option>`);
     this.element.value = this.settings.period.get();
   }
@@ -264,6 +263,7 @@ class SoundAlarmView {
       return;
     if (this._timer.elapsedSeconds() % this.settings.period.get() === 0) {
       this._audio.currentTime = 0;
+      this._audio.volume = 1;
       this._audio.play();
     }
   }
