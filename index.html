@@ -274,7 +274,7 @@ class VoiceAlarmView {
 
   _onSecondPassed() {
     if (this.settings.period.get() && this._timer.elapsedSeconds() % this.settings.period.get() === 0)
-      this._voice.speak('Running ' + this._timer.elapsedTimeText());
+      this._voice.speak(this._timer.elapsedTimeText());
   }
 }
 
