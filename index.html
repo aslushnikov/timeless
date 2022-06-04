@@ -8,7 +8,7 @@ import { createEvent, emitEvent, onDOMEvent, disposeAll, observable } from './ut
 
 const CHAR_SUM = '∑';
 const CHAR_ALARM = '⏰';
-const CHAR_SPEECH = '💬';
+const CHAR_SPEECH = '🗣';
 
 function toHumanStopwatch(elapsedMs) {
   const ms = elapsedMs % 1000;
@@ -54,19 +54,23 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.body.append(html`
-    <section>
-      ${timerView.element}
-      <div>
-      <button onzrender=${node => timerView.isRunning.observe(isRunning => {
-        node.textContent = isRunning ? 'Stop' : 'Start';
-      })} onclick=${() => timerView.toggle()}></button>
-      ${micView.element}
-      </div>
-      <div>
-        ${new SoundAlarmView(timerView).element}
-        ${new VoiceAlarmView(timerView, voice).element}
-      </div>
+    <section id=main>
+      <div id=timer>${timerView.element}</div>
       ${lapsVeiw.element}
+      <hbox style='justify-content: center;'>
+        ${new SoundAlarmView(timerView).element}
+      </hbox>
+      <hbox style='justify-content: center;'>
+        ${new VoiceAlarmView(timerView, voice).element}
+      </hbox>
+      <hbox style=' '>
+        <button id=startbtn style='
+        'onzrender=${node => timerView.isRunning.observe(isRunning => {
+          node.textContent = isRunning ? 'Stop' : 'Start';
+          node.className = isRunning ? 'running' : '';
+        })} onclick=${() => timerView.toggle()}></button>
+        ${micView.element}
+      </hbox>
     </section>
   `);
 }, false);
@@ -81,7 +85,7 @@ class TimerView {
     };
     this.isRunning = observable(false);
 
-    this.element = html`<span id=timer></span>`;
+    this.element = html`<span></span>`;
     this._timer = null;
     this._elapsed = 0;
     this._render();
@@ -152,19 +156,37 @@ class TimerView {
 class LapsView {
   constructor() {
     this._laps = [];
-    this.element = html`<div></div>`;
+    this._lapsElement = html`<div style='flex: auto; min-height: 0; overflow: scroll;'></div>`;
+    this._titleElement = html`<hbox></hbox>`;
+    this.element = html`
+      <vbox style='flex: auto; min-height: 0;'>
+        ${this._titleElement}
+        ${this._lapsElement}
+      </vbox>
+    `;
     this._render();
   }
 
   _render() {
-    this.element.textContent = '';
     let sum = 0;
+
+    this._lapsElement.textContent = '';
     for (let i = 0; i < this._laps.length; ++i) {
       const lap = this._laps[i];
       sum += lap;
-      this.element.append(html`<div>Lap ${i + 1}: ${toHumanStopwatch(lap)}</div>`);
+      this._lapsElement.append(html`
+        <hbox>
+          Lap ${i + 1}<span style='flex: auto;'></span><span style='font-family: var(--monospace);'>${toHumanStopwatch(lap)}</span>
+        </hbox>
+      `);
     }
-    this.element.append(html`<div>${CHAR_SUM}: ${toHumanStopwatch(sum)}</div>`);
+    this._titleElement.textContent = '';
+    this._titleElement.append(html`
+      <h3>Laps: ${this._laps.length}</h3>
+      <span style='flex: auto'></span>
+      <h3>${toHumanStopwatch(sum)}</h3>
+    `);
+    this._lapsElement.scrollTop = 1000000;
   }
 
   addLap(elapsed) {
@@ -181,13 +203,13 @@ class SoundAlarmView {
     ];
 
     this.settings = {
-      period: observable(5),
-      enabled: observable(false),
+      period: observable(0),
     };
 
     this._audio = new Audio('./tone.wav');
     this._audio.load();
-    this.settings.enabled.observe(value => {
+
+    this.settings.period.observe(value => {
       if (value) {
         this._audio.currentTime = 0;
         this._audio.play();
@@ -195,27 +217,16 @@ class SoundAlarmView {
     });
 
     this.element = html`
-      <hbox>
-        <input id=sound-enabled
-               type=checkbox
-               onzrender=${node => this.settings.enabled.observe(value => {
-                 node.checked = value;
-               })}
-               oninput=${event => this.settings.enabled.set(event.target.checked)}
-        >
-        <label for=sound-enabled>
-          ${CHAR_ALARM} every
-          <select onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
-          seconds
-        </label>
-      </hbox>
+      <select class=alarm-options onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
     `;
+    this.element.append(html`<option value=0>${CHAR_ALARM} never</option>`);
     for (let i = 5; i < 60; ++i)
-      this.element.$('select').append(html`<option value=${i} selected=${this.settings.period.get() === i}>${i}</option>`);
+      this.element.append(html`<option value=${i}>${CHAR_ALARM} every ${i} seconds</option>`);
+    this.element.value = this.settings.period.get();
   }
 
   _onSecondPassed() {
-    if (!this.settings.enabled.get())
+    if (!this.settings.period.get())
       return;
     if (this._timer.elapsedSeconds() % this.settings.period.get() === 0) {
       this._audio.currentTime = 0;
@@ -234,32 +245,21 @@ class VoiceAlarmView {
 
     this.settings = {
       period: observable(30),
-      enabled: observable(false),
     };
 
     this.element = html`
-      <hbox>
-        <input type=checkbox
-            oninput=${event => this.settings.enabled.set(event.target.checked)}
-            onzrender=${node => this.settings.enabled.observe(value => {
-              node.checked = value;
-            })}
-        >
-        <label for=time-alarm>
-          ${CHAR_SPEECH} every
-          <select onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
-          seconds
-        </label>
-      </hbox>
+      <select class=alarm-options onInput=${(event) => this.settings.period.set(+event.target.value)}></select>
     `;
-  for (let i = 2; i < 10; ++i)
-    this.element.$('select').append(html`<option value=${i * 5} selected=${this.settings.period.get() === i * 5}>${i * 5}</option>`);
+
+    this.element.append(html`<option value=0>${CHAR_SPEECH} never</option>`);
+    for (let i = 1; i < 12; ++i)
+      this.element.append(html`<option value=${i * 5} selected=${this.settings.period.get() === i * 5}>${CHAR_SPEECH} every ${i * 5} seconds</option>`);
+    for (let i = 1; i < 10; ++i)
+      this.element.append(html`<option value=${i * 60}>${CHAR_SPEECH} every ${i} minute${i>1 ? 's':''}</option>`);
   }
 
   _onSecondPassed() {
-    if (!this.settings.enabled.get())
-      return;
-    if (this._timer.elapsedSeconds() % this.settings.period.get() === 0)
+    if (this.settings.period.get() && this._timer.elapsedSeconds() % this.settings.period.get() === 0)
       this._voice.speak('Running ' + this._timer.elapsedSecondsText());
   }
 }

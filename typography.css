@@ -1,6 +1,15 @@
 /* Mini CSS reset and basic typography  */
 :root {
-  --monospace: Consolas, Menlo, monospace;
+  --monospace: ui-monospace,
+             Consolas, Menlo, Monaco,
+             "Cascadia Mono", "Segoe UI Mono",
+             "Roboto Mono",
+             "Oxygen Mono",
+             "Ubuntu Monospace",
+             "Source Code Pro",
+             "Fira Mono",
+             "Droid Sans Mono",
+             "Courier New", monospace;
   --regular: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Droid Sans, Helvetica Neue, Fira Sans, sans-serif;
   --text-color: #24292e;
   --background-color: #fff;
