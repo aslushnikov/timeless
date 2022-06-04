@@ -77,10 +77,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     <section id=main>
       <div id=timer>${timerView.element}</div>
       ${lapsVeiw.element}
-      <hbox style='justify-content: space-between;'>
+      <vbox style='justify-content: space-between;'>
         ${new SoundAlarmView(timerView).element}
         ${new VoiceAlarmView(timerView, voice).element}
-      </hbox>
+      </vbox>
       <hbox style='justify-content: space-between; margin-bottom: 5px;'>
         ${startStopButton}
         ${micView.element}
@@ -185,7 +185,7 @@ class LapsView {
         font-size: 16px;
         flex: auto;
         min-height: 0;
-        overflow: scroll;
+        overflow: auto;
     '></div>`;
     this._titleElement = html`<hbox style='
         font-size: 24px;

@@ -40,7 +40,7 @@ select {
   -webkit-appearance: none;
   appearance: none;
   height: 30px;
-  width: 30em;
+  width: 100%;
   font-size: 16px;
   border: 1px solid #767676;
   border-radius: 5px;
@@ -48,9 +48,6 @@ select {
   padding: 5px;
 }
 
-select + select {
-  margin-left: 5px;
-}
 
 
 
