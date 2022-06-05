@@ -38,6 +38,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const micDebugElement = html`<span>(enable mic)</span>`;
 
+  const wakeLock = navigator.wakeLock ? await navigator.wakeLock.request('screen') : null;
+
   micView.events.onRecognition(transcript => {
     const lastWord = transcript.toLowerCase().trim().split(/\W+/).pop();
     micDebugElement.textContent = '"' + transcript.trim() + '"';
@@ -171,7 +173,7 @@ class TimerView {
     seconds = seconds % 60;
     let text = [];
     if (minutes)
-      text.push(minutes === 1 ? '1 minute' : minute + ' minutes');
+      text.push(minutes === 1 ? '1 minute' : minutes + ' minutes');
     if (seconds || !minutes)
       text.push(seconds === 1 ? '1 second' : seconds + ' seconds');
     return text.join(' ');
